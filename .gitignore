@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.azure/*
+!.azure/deployment-plan.md
+!.azure/.gitignore
+.playwright-mcp/
+data/
+test-results/
+playwright-report/
