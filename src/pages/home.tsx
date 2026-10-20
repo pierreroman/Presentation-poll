@@ -63,7 +63,21 @@ function StatusBadge({ status }: { status: PollStatus }) {
 
 const totalVotes = (q: PollQuestion) => q.options.reduce((s, o) => s + o.votes, 0);
 
-type Mode = "vote" | "present" | "edit";
+type Mode = "vote" | "present" | "edit" | "results";
+
+const MODE_PATHS: Record<Mode, string> = {
+  vote: "/",
+  present: "/presenter",
+  edit: "/questions",
+  results: "/results",
+};
+
+const MODE_LABELS: Record<Mode, string> = {
+  vote: "Vote",
+  present: "Presenter",
+  edit: "Questions",
+  results: "Results",
+};
 
 export function HomePage() {
   const poll = usePollSession();
@@ -85,7 +99,8 @@ export function HomePage() {
 
 const modeFromPath = (): Mode =>
   window.location.pathname.startsWith("/questions") ? "edit"
-    : window.location.pathname.startsWith("/presenter") ? "present" : "vote";
+    : window.location.pathname.startsWith("/presenter") ? "present"
+      : window.location.pathname.startsWith("/results") ? "results" : "vote";
 
 function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; session: PollSession }) {
   const { canPresent, pending, error, principal } = poll;
@@ -107,7 +122,7 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
       setEditRevision(session.configRevision);
     }
     setRequestedMode(next);
-    window.history.pushState(null, "", next === "vote" ? "/" : next === "present" ? "/presenter" : "/questions");
+    window.history.pushState(null, "", MODE_PATHS[next]);
   };
   useEffect(() => {
     const onPopState = () => setRequestedMode(modeFromPath());
@@ -177,7 +192,7 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
         {canPresent ? <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">{principal?.userDetails}</span>
         <div role="group" aria-label="View" className="inline-flex rounded-md border border-border p-0.5">
-          {(["vote", "present", "edit"] as Mode[]).map((m) => (
+          {(["vote", "present", "edit", "results"] as Mode[]).map((m) => (
             <Button
               key={m}
               size="sm"
@@ -185,7 +200,7 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
               aria-pressed={mode === m}
               onClick={() => setMode(m)}
             >
-              {m === "vote" ? "Vote" : m === "present" ? "Presenter" : "Questions"}
+              {MODE_LABELS[m]}
             </Button>
           ))}
         </div>
@@ -314,6 +329,8 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
             </section>
           )}
         </div>
+      ) : mode === "results" ? (
+        <SessionResults questions={questions} />
       ) : (
         <QuestionEditor
           questions={questions}
@@ -323,6 +340,60 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
       )}
       </fieldset>
     </div>
+  );
+}
+
+function SessionResults({ questions }: { questions: PollQuestion[] }) {
+  const total = questions.reduce((sum, question) => sum + totalVotes(question), 0);
+  return (
+    <section id="poll-work" tabIndex={-1} aria-labelledby="results-heading" className="space-y-6 outline-none">
+      <header>
+        <p className="eyebrow">Presenter only</p>
+        <h1 id="results-heading" className="mt-2 text-3xl font-semibold">Results by question</h1>
+        <p className="mt-2 text-sm text-muted-foreground" aria-live="polite">
+          {questions.length} {questions.length === 1 ? "question" : "questions"} | {total} total {total === 1 ? "vote" : "votes"}
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Refreshes automatically every three seconds. Counts remain visible here when results are hidden from attendees.
+        </p>
+      </header>
+      {questions.length === 0 && <p>No questions yet. Add statements in Questions to see their results here.</p>}
+      <ol className="space-y-4">
+        {questions.map((question, index) => {
+          const count = totalVotes(question);
+          return (
+            <li key={question.id} className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="eyebrow">Question {index + 1}</h2>
+                <StatusBadge status={question.status} />
+              </div>
+              <p className="mt-3 text-xl font-semibold">{question.prompt}</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Total: {count} {count === 1 ? "vote" : "votes"}{count === 0 ? " — No votes yet." : ""}
+              </p>
+              <dl className="mt-5 space-y-4">
+                {question.options.map((option) => {
+                  const percent = count ? Math.round(option.votes / count * 100) : 0;
+                  return (
+                    <div key={option.id}>
+                      <div className="flex items-baseline justify-between gap-4">
+                        <dt className="min-w-0 break-words text-sm font-medium">{option.label}</dt>
+                        <dd className="shrink-0 text-sm tabular-nums">
+                          {option.votes} {option.votes === 1 ? "vote" : "votes"} ({percent}%)
+                        </dd>
+                      </div>
+                      <progress className="overview-progress !my-2 !h-2 rounded-full"
+                        aria-label={`Question ${index + 1}: ${option.label}`}
+                        value={option.votes} max={Math.max(1, count)} />
+                    </div>
+                  );
+                })}
+              </dl>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 

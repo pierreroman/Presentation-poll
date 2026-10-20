@@ -14,8 +14,12 @@ Preloaded with the six questions from the *Digital sovereignty* session. Edit th
   not a screenshot containing duplicated text.
 - **Vote view:** see every statement and add votes to the question opened in Presenter.
   Each click adds one vote; this is not one-response-per-person voting.
-- **Presenter / Questions:** only invited Microsoft accounts with the `presenter` role
+- **Presenter / Questions / Results:** only invited Microsoft accounts with the `presenter` role
   can access these views or their APIs. Attendees see voting only.
+- **Results page (`/results`):** every question listed separately, with its status,
+  answer counts, percentages, per-question total, and an overall vote total.
+  Refreshes every three seconds and is read-only. Presenters see the actual counts
+  here even when results are hidden from attendees.
 - **Run of show:** every question with its status (Not started / Voting open / Closed) and vote count.
 - **Present view:** big question, A/B/C answers with live bars, percentages and counts.
 - **Controls:** Open / Close voting (one question open at a time), Hide / Show results,
@@ -139,7 +143,7 @@ Signing in does **not** automatically grant the `presenter` role. After deployme
 5. Send each invitation link privately to that account. Each presenter must redeem
    their invitation while signed in with that exact Microsoft account.
 6. Open **Presenter sign-in** on the site. Invited users see **Presenter** and
-   **Questions**; everyone else remains in the voting view. If a role was changed,
+   **Questions** and **Results**; everyone else remains in the voting view. If a role was changed,
    sign out and sign in again to refresh the role.
 
 The built-in provider accepts work and personal Microsoft accounts. The tenant used
@@ -148,7 +152,7 @@ invitation role, not by matching an email string, a URL flag, local storage, or 
 To revoke access, remove the user's `presenter` role in Role management.
 
 [`public/staticwebapp.config.json`](public/staticwebapp.config.json) protects
-`/presenter`, `/questions`, and `/api/presenter/*`. The API independently verifies the
+`/presenter`, `/questions`, `/results`, and `/api/presenter/*`. The API independently verifies the
 trusted Microsoft identity and `presenter` role for every private read and mutation.
 Unknown API routes are restricted by default, and public votes cannot alter questions,
 status, results visibility, or role assignments. GitHub sign-in is disabled.
