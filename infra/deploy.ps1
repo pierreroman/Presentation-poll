@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-  Provisions the Azure Static Web App for Debunkers and wires the
-  deployment token into the GitHub repo as an Actions secret.
+  Provisions Debunkers' Static Web App, shared Table Storage, and API settings,
+  then wires the deployment token into the GitHub repo as an Actions secret.
 
 .REQUIREMENTS
   Azure CLI (az login done) and GitHub CLI (gh auth login done).
@@ -58,3 +58,5 @@ if ($LASTEXITCODE -ne 0) { throw 'Unable to store the GitHub deployment secret.'
 Write-Host ""
 Write-Host "Done. Site URL: $($result.url.value)"
 Write-Host "Push to main (or run the workflow manually) to publish the app."
+Write-Host "Before presenting, invite the approved Microsoft accounts with the presenter role"
+Write-Host "in the Static Web App's Role management page. Sign-in alone does not grant access."

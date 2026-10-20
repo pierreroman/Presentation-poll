@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -20,13 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import {
-  SAMPLE_QUESTIONS,
-  SESSION_TITLE,
-  newId,
-  type PollQuestion,
-  type PollStatus,
-} from "./poll-data";
+import { newId, type PollQuestion, type PollStatus } from "./poll-data";
+import { usePollSession } from "@/lib/use-poll-session";
+import type { PollSession } from "@/lib/poll-types";
 
 const STATUS_TONE: Record<PollStatus, { label: string; dot: string; badge: string }> = {
   ready: {
@@ -70,62 +66,77 @@ const totalVotes = (q: PollQuestion) => q.options.reduce((s, o) => s + o.votes, 
 type Mode = "vote" | "present" | "edit";
 
 export function HomePage() {
-  const [title, setTitle] = useState(SESSION_TITLE);
-  const [questions, setQuestions] = useState<PollQuestion[]>(SAMPLE_QUESTIONS);
-  const [currentId, setCurrentId] = useState<string>(SAMPLE_QUESTIONS[0].id);
-  const [mode, setMode] = useState<Mode>("vote");
-  const [showResults, setShowResults] = useState(true);
-  const [voteLog, setVoteLog] = useState<{ q: string; o: string }[]>([]);
+  const poll = usePollSession();
+  if (!poll.session) {
+    return (
+      <section id="poll-work" className="poll-container" aria-live="polite">
+        {poll.error ? (
+          <div role="alert" className="question-card">
+            <p>{poll.error}</p>
+            <Button className="mt-3" onClick={() => void poll.refresh()}>Retry connection</Button>
+            <a className="mt-3 underline" href="/.auth/login/aad?post_login_redirect_uri=/presenter">Presenter sign-in</a>
+          </div>
+        ) : <p>Connecting to the live session...</p>}
+      </section>
+    );
+  }
+  return <PollPage poll={poll} session={poll.session} />;
+}
+
+const modeFromPath = (): Mode =>
+  window.location.pathname.startsWith("/questions") ? "edit"
+    : window.location.pathname.startsWith("/presenter") ? "present" : "vote";
+
+function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; session: PollSession }) {
+  const { canPresent, pending, error, principal } = poll;
+  const [requestedMode, setRequestedMode] = useState<Mode>(modeFromPath);
+  const mode = canPresent ? requestedMode : "vote";
+  const [draftTitle, setDraftTitle] = useState(session.title);
+  const [draftQuestions, setQuestions] = useState(session.questions);
+  const [editRevision, setEditRevision] = useState(session.configRevision);
+  const [currentId, setCurrentId] = useState(session.questions[0]?.id ?? "");
+  const questions = mode === "edit" ? draftQuestions : session.questions;
+  const title = mode === "edit" ? draftTitle : session.title;
+  const showResults = session.showResults;
+
+  const setMode = (next: Mode) => {
+    if (next !== "vote" && !canPresent) return;
+    if (next === "edit" && mode !== "edit") {
+      setDraftTitle(session.title);
+      setQuestions(session.questions);
+      setEditRevision(session.configRevision);
+    }
+    setRequestedMode(next);
+    window.history.pushState(null, "", next === "vote" ? "/" : next === "present" ? "/presenter" : "/questions");
+  };
+  useEffect(() => {
+    const onPopState = () => setRequestedMode(modeFromPath());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const index = Math.max(0, questions.findIndex((q) => q.id === currentId));
   const current = questions[index];
 
-  const update = (id: string, fn: (q: PollQuestion) => PollQuestion) =>
-    setQuestions((qs) => qs.map((q) => (q.id === id ? fn(q) : q)));
-
   const setStatus = (status: PollStatus) => {
     if (!current) return;
-    setQuestions((qs) =>
-      qs.map((q) => {
-        if (q.id === current.id) return { ...q, status };
-        // Only one question collects votes at a time.
-        if (status === "open" && q.status === "open") return { ...q, status: "closed" };
-        return q;
-      }),
-    );
+    void poll.command({ type: "status", questionId: current.id, status });
   };
 
   const vote = (optionId: string, questionId = current?.id) => {
-    const question = questions.find((q) => q.id === questionId);
-    if (!question || question.status !== "open") return;
-    update(question.id, (q) => ({
-      ...q,
-      options: q.options.map((o) => (o.id === optionId ? { ...o, votes: o.votes + 1 } : o)),
-    }));
-    setVoteLog((l) => [...l, { q: question.id, o: optionId }]);
+    if (questionId) void poll.vote(questionId, optionId);
   };
 
   const undoVote = () => {
     if (!current) return;
-    const lastIdx = voteLog.map((v) => v.q).lastIndexOf(current.id);
-    if (lastIdx < 0) return;
-    const last = voteLog[lastIdx];
-    update(current.id, (q) => ({
-      ...q,
-      options: q.options.map((o) => (o.id === last.o ? { ...o, votes: Math.max(0, o.votes - 1) } : o)),
-    }));
-    setVoteLog((l) => l.filter((_, i) => i !== lastIdx));
+    void poll.command({ type: "undo", questionId: current.id });
   };
 
-  const resetVotes = () => {
+  const resetVotes = async () => {
     if (!current) return;
-    update(current.id, (q) => ({
-      ...q,
-      status: "ready",
-      options: q.options.map((o) => ({ ...o, votes: 0 })),
-    }));
-    setVoteLog((l) => l.filter((v) => v.q !== current.id));
-    toast.success("Votes cleared for this question");
+    if (await poll.command({ type: "reset", questionId: current.id })) {
+      toast.success("Votes cleared for this question");
+    }
   };
 
   const go = (delta: number) => {
@@ -133,10 +144,20 @@ export function HomePage() {
     if (next) setCurrentId(next.id);
   };
 
-  const canUndo = current ? voteLog.some((v) => v.q === current.id) : false;
+  const canUndo = current ? session.undoQuestionIds.includes(current.id) : false;
+  const saveQuestions = async () => {
+    if (await poll.command({
+      type: "edit", title: draftTitle, questions: draftQuestions, configRevision: editRevision,
+    })) {
+      toast.success("Questions saved");
+      setMode("present");
+    }
+  };
 
   return (
     <div className="poll-container">
+      {error && <div role="alert" className="question-card"><p>{error}</p><Button onClick={() => void poll.refresh()}>Retry connection</Button></div>}
+      <fieldset disabled={pending || !!error} className="contents">
       <div className="view-toolbar flex flex-wrap items-end justify-between gap-3">
         {mode !== "vote" && (
         <div className="min-w-0 flex-1">
@@ -146,11 +167,15 @@ export function HomePage() {
           <Input
             id="session-title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            readOnly={mode !== "edit"}
+            maxLength={200}
             className="mt-1 h-10 max-w-xl border-transparent px-0 text-xl font-semibold shadow-none hover:border-border focus-visible:px-2"
           />
         </div>
         )}
+        {canPresent ? <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">{principal?.userDetails}</span>
         <div role="group" aria-label="View" className="inline-flex rounded-md border border-border p-0.5">
           {(["vote", "present", "edit"] as Mode[]).map((m) => (
             <Button
@@ -164,6 +189,12 @@ export function HomePage() {
             </Button>
           ))}
         </div>
+        <a className="text-xs underline" href="/.auth/logout?post_logout_redirect_uri=/">Sign out</a>
+        </div> : principal ? (
+          <div className="text-xs text-muted-foreground">
+            Signed in without presenter access. <a className="underline" href="/.auth/logout?post_logout_redirect_uri=/">Sign out</a>
+          </div>
+        ) : <a className="text-xs text-muted-foreground underline" href="/.auth/login/aad?post_login_redirect_uri=/presenter">Presenter sign-in</a>}
       </div>
 
       {mode === "vote" ? (
@@ -176,8 +207,8 @@ export function HomePage() {
               Choose Busted, Plausible or Confirmed for each statement.
             </p>
             <p className="overview-note">
-              Open a question in Presenter to collect votes. Each click adds one vote on this device.
-              Results reflect audience opinion, not a factual verdict.
+              Vote when the presenter opens a statement. Each click adds one shared vote.
+              Results reflect audience opinion, not a factual verdict. Updates refresh automatically.
             </p>
           </div>
           <div className="overview-progress-heading">
@@ -186,15 +217,15 @@ export function HomePage() {
               {questions.some((q) => q.status === "open") ? "Voting is open" : "Waiting for presenter"}
             </span>
             <span aria-live="polite">
-              {questions.filter((q) => totalVotes(q) > 0).length} of {questions.length} with votes
+              {showResults ? `${questions.filter((q) => totalVotes(q) > 0).length} of ${questions.length} with votes` : "Results hidden"}
             </span>
           </div>
           <progress className="overview-progress" aria-label="Questions with votes"
-            value={questions.filter((q) => totalVotes(q) > 0).length} max={Math.max(1, questions.length)} />
+            value={showResults ? questions.filter((q) => totalVotes(q) > 0).length : 0} max={Math.max(1, questions.length)} />
           {questions.length === 0 && (
             <div className="question-card">
               <p>No questions yet.</p>
-              <Button onClick={() => setMode("edit")}>Add questions</Button>
+              {canPresent && <Button onClick={() => setMode("edit")}>Add questions</Button>}
             </div>
           )}
           <div className="question-grid">
@@ -215,9 +246,9 @@ export function HomePage() {
                     </button>
                   ))}
                 </div>
-                <button type="button" className="present-question" onClick={() => { setCurrentId(q.id); setMode("present"); }}>
+                {canPresent && <button type="button" className="present-question" onClick={() => { setCurrentId(q.id); setMode("present"); }}>
                   Present statement {i + 1} <ArrowRight className="size-3" aria-hidden="true" />
-                </button>
+                </button>}
               </article>
             ))}
           </div>
@@ -254,7 +285,7 @@ export function HomePage() {
                     <Play aria-hidden="true" /> {current.status === "closed" ? "Reopen voting" : "Open voting"}
                   </Button>
                 )}
-                <Button variant="outline" aria-pressed={showResults} onClick={() => setShowResults((s) => !s)}>
+                <Button variant="outline" aria-pressed={showResults} onClick={() => void poll.command({ type: "results", showResults: !showResults })}>
                   {showResults ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
                   {showResults ? "Hide results" : "Show results"}
                 </Button>
@@ -287,12 +318,10 @@ export function HomePage() {
         <QuestionEditor
           questions={questions}
           setQuestions={setQuestions}
-          onDone={(id) => {
-            if (id) setCurrentId(id);
-            setMode("present");
-          }}
+          onDone={() => void saveQuestions()}
         />
       )}
+      </fieldset>
     </div>
   );
 }
@@ -499,11 +528,11 @@ function QuestionEditor({
           Questions <span className="font-normal text-foreground">({questions.length})</span>
         </h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={addQuestion}>
+          <Button variant="outline" onClick={addQuestion} disabled={questions.length >= 20}>
             <Plus aria-hidden="true" /> Add question
           </Button>
           <Button onClick={() => onDone()}>
-            <Play aria-hidden="true" /> Present
+            <Play aria-hidden="true" /> Save and present
           </Button>
         </div>
       </div>
@@ -524,6 +553,7 @@ function QuestionEditor({
                       id={`prompt-${q.id}`}
                       value={q.prompt}
                       rows={2}
+                      maxLength={500}
                       placeholder="Type the question to ask the audience"
                       onChange={(e) => patch(q.id, (x) => ({ ...x, prompt: e.target.value }))}
                       className="mt-1 text-base"
@@ -540,6 +570,7 @@ function QuestionEditor({
                           <Input
                             aria-label={`Option ${LETTERS[oi]}`}
                             value={o.label}
+                            maxLength={120}
                             placeholder={`Option ${LETTERS[oi]}`}
                             onChange={(e) =>
                               patch(q.id, (x) => ({

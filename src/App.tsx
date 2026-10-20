@@ -23,7 +23,7 @@ export function App() {
       </a>
       <header className="site-header">
         <div className="site-header-inner">
-          <a href="#" className="brand" aria-label="Sovereign cloud Debunkers home">
+          <a href="/" className="brand" aria-label="Sovereign cloud Debunkers home">
             <strong>Sovereign cloud</strong> <span>Debunkers</span>
           </a>
           <Button variant="outline" size="sm" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
@@ -36,7 +36,7 @@ export function App() {
       </main>
       <footer className="site-footer">
         <p>Six statements. Three possibilities. Your perspective.</p>
-        <p>Votes stay on this device for this session. Reloading clears all votes.</p>
+        <p>Anonymous audience voting. Shared results. Presenter controls require an invited Microsoft account.</p>
       </footer>
       <Toaster />
     </div>

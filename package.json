@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:api": "npm --prefix api run build",
+    "test:api": "npm --prefix api test"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",
