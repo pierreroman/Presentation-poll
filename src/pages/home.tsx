@@ -97,15 +97,15 @@ export function HomePage() {
   return <PollPage poll={poll} session={poll.session} />;
 }
 
-const modeFromPath = (): Mode =>
-  window.location.pathname.startsWith("/questions") ? "edit"
-    : window.location.pathname.startsWith("/presenter") ? "present"
-      : window.location.pathname.startsWith("/results") ? "results" : "vote";
+const modeFromPath = (path: string): Mode =>
+  path.startsWith("/questions") ? "edit"
+    : path.startsWith("/presenter") ? "present"
+      : path.startsWith("/results") ? "results" : "vote";
 
 function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; session: PollSession }) {
   const { canPresent, pending, error, principal } = poll;
-  const [requestedMode, setRequestedMode] = useState<Mode>(modeFromPath);
-  const mode = canPresent ? requestedMode : "vote";
+  const [path, setPath] = useState(() => window.location.pathname);
+  const mode = canPresent ? modeFromPath(path) : "vote";
   const [draftTitle, setDraftTitle] = useState(session.title);
   const [draftQuestions, setQuestions] = useState(session.questions);
   const [editRevision, setEditRevision] = useState(session.configRevision);
@@ -121,11 +121,11 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
       setQuestions(session.questions);
       setEditRevision(session.configRevision);
     }
-    setRequestedMode(next);
+    setPath(MODE_PATHS[next]);
     window.history.pushState(null, "", MODE_PATHS[next]);
   };
   useEffect(() => {
-    const onPopState = () => setRequestedMode(modeFromPath());
+    const onPopState = () => setPath(window.location.pathname);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -330,7 +330,7 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
           )}
         </div>
       ) : mode === "results" ? (
-        <SessionResults questions={questions} />
+        <SessionResults questions={questions} path={path} />
       ) : (
         <QuestionEditor
           questions={questions}
@@ -343,31 +343,71 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
   );
 }
 
-function SessionResults({ questions }: { questions: PollQuestion[] }) {
-  const total = questions.reduce((sum, question) => sum + totalVotes(question), 0);
+function SessionResults({ questions, path }: { questions: PollQuestion[]; path: string }) {
+  if (path === "/results" || path === "/results/") {
+    return (
+      <section id="poll-work" tabIndex={-1} aria-labelledby="results-heading" className="space-y-6 outline-none">
+        <header>
+          <p className="eyebrow">Presenter only</p>
+          <h1 id="results-heading" className="mt-2 text-3xl font-semibold">Question results</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Choose a question to open its own live results page.</p>
+        </header>
+        {questions.length === 0 && <p>No questions yet. Add statements in Questions to see their results here.</p>}
+        <ol className="space-y-3">
+          {questions.map((question, index) => (
+            <li key={question.id}>
+              <a href={`/results-${index + 1}`} className="block rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-ring">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="eyebrow">Question {index + 1}</span>
+                  <StatusBadge status={question.status} />
+                </div>
+                <p className="mt-3 font-semibold">{question.prompt}</p>
+                <span className="mt-2 inline-block text-sm text-primary">View results <span aria-hidden="true">&rarr;</span></span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </section>
+    );
+  }
+
+  const match = /^\/results-([1-9]\d*)\/?$/.exec(path);
+  const number = match ? Number(match[1]) : 0;
+  const question = Number.isSafeInteger(number) ? questions[number - 1] : undefined;
+  if (!question) {
+    return (
+      <section id="poll-work" tabIndex={-1} aria-labelledby="results-heading" className="space-y-4 outline-none">
+        <h1 id="results-heading" className="text-3xl font-semibold">Question not found</h1>
+        <p>This results link does not match a question in the current session.</p>
+        <a className="text-primary underline" href="/results">View all question links</a>
+      </section>
+    );
+  }
+
+  const count = totalVotes(question);
   return (
     <section id="poll-work" tabIndex={-1} aria-labelledby="results-heading" className="space-y-6 outline-none">
       <header>
         <p className="eyebrow">Presenter only</p>
-        <h1 id="results-heading" className="mt-2 text-3xl font-semibold">Results by question</h1>
+        <h1 id="results-heading" className="mt-2 text-3xl font-semibold">Results for question {number}</h1>
         <p className="mt-2 text-sm text-muted-foreground" aria-live="polite">
-          {questions.length} {questions.length === 1 ? "question" : "questions"} | {total} total {total === 1 ? "vote" : "votes"}
+          Question {number} of {questions.length} | {count} total {count === 1 ? "vote" : "votes"}
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           Refreshes automatically every three seconds. Counts remain visible here when results are hidden from attendees.
         </p>
       </header>
-      {questions.length === 0 && <p>No questions yet. Add statements in Questions to see their results here.</p>}
-      <ol className="space-y-4">
-        {questions.map((question, index) => {
-          const count = totalVotes(question);
-          return (
-            <li key={question.id} className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+      <nav aria-label="Question results" className="flex flex-wrap items-center gap-4 text-sm">
+        <a className="text-primary underline" href="/results">All question links</a>
+        {number > 1 && <a className="text-primary underline" href={`/results-${number - 1}`}>Previous question</a>}
+        {number < questions.length && <a className="text-primary underline" href={`/results-${number + 1}`}>Next question</a>}
+      </nav>
+            <article aria-labelledby="question-result-heading" className="rounded-2xl border border-border bg-card p-5 sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="eyebrow">Question {index + 1}</h2>
+                <span className="eyebrow">Question {number}</span>
                 <StatusBadge status={question.status} />
               </div>
-              <p className="mt-3 text-xl font-semibold">{question.prompt}</p>
+              <h2 id="question-result-heading" className="mt-3 text-xl font-semibold">{question.prompt}</h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 Total: {count} {count === 1 ? "vote" : "votes"}{count === 0 ? " — No votes yet." : ""}
               </p>
@@ -383,16 +423,13 @@ function SessionResults({ questions }: { questions: PollQuestion[] }) {
                         </dd>
                       </div>
                       <progress className="overview-progress !my-2 !h-2 rounded-full"
-                        aria-label={`Question ${index + 1}: ${option.label}`}
+                        aria-label={`Question ${number}: ${option.label}`}
                         value={option.votes} max={Math.max(1, count)} />
                     </div>
                   );
                 })}
               </dl>
-            </li>
-          );
-        })}
-      </ol>
+            </article>
     </section>
   );
 }

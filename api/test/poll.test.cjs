@@ -221,7 +221,7 @@ test("busy sessions return a retryable conflict after bounded retries", async ()
 
 test("Static Web Apps protects all presenter pages and API routes", () => {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, "../../public/staticwebapp.config.json"), "utf8"));
-  for (const route of ["/presenter", "/presenter/*", "/questions", "/questions/*", "/results", "/results/*", "/api/presenter/*", "/api/*"]) {
+  for (const route of ["/presenter", "/presenter/*", "/questions", "/questions/*", "/results", "/results-*", "/results/*", "/api/presenter/*", "/api/*"]) {
     assert.deepEqual(config.routes.find((rule) => rule.route === route)?.allowedRoles, ["presenter"]);
   }
   assert.deepEqual(config.routes.find((rule) => rule.route === "/api/session").methods, ["GET"]);

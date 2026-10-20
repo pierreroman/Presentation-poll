@@ -30,6 +30,11 @@
       "allowedRoles": ["presenter"]
     },
     {
+      "route": "/results-*",
+      "rewrite": "/index.html",
+      "allowedRoles": ["presenter"]
+    },
+    {
       "route": "/results/*",
       "rewrite": "/index.html",
       "allowedRoles": ["presenter"]
