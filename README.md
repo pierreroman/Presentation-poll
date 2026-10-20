@@ -1,4 +1,4 @@
-# Live Session Poll
+# Debunkers
 
 A presenter console for running Busted / Plausible / Confirmed votes during a talk.
 Single-page React app (Vite + TypeScript + Tailwind CSS v4), no backend.
@@ -46,8 +46,19 @@ The script:
    Actions secret on this repo.
 
 After that, every push to `main` runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml):
-install → type-check → build → upload `dist/` to the Static Web App. Pull requests get a
-staging environment that is torn down when the PR closes.
+install → type-check → build → upload `dist/` to the Static Web App. Same-repository pull
+requests get a staging environment that is torn down when the PR closes. Fork pull
+requests are built and type-checked, but do not receive deployment secrets or previews.
+
+You can also run **Deploy to Azure Static Web Apps** from GitHub's **Actions** tab using
+**Run workflow**. Select `main` to deploy to production; other branches deploy to preview
+environments. Push the workflow to GitHub before trying to run it.
+
+For an existing Static Web App, add its deployment token in this repository's
+**Settings → Secrets and variables → Actions → New repository secret**, named
+`AZURE_STATIC_WEB_APPS_API_TOKEN`. Obtain the token from the Azure portal's Static Web
+App **Manage deployment token** page. The workflow fails explicitly if the secret is
+missing. Never commit or paste the token into the workflow.
 
 Manual alternative without the script:
 

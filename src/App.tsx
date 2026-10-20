@@ -14,7 +14,7 @@ export function App() {
       <header className="border-b border-border bg-primary text-primary-foreground">
         <div className="mx-auto flex h-12 w-full max-w-[1400px] items-center gap-2 px-4">
           <BarChart3 className="size-5" aria-hidden="true" />
-          <span className="text-sm font-semibold tracking-tight">Live Session Poll</span>
+          <span className="text-sm font-semibold tracking-tight">Debunkers</span>
         </div>
       </header>
       <main className="flex flex-1 flex-col">
