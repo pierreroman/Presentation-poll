@@ -15,10 +15,8 @@ function isSession(value: unknown): value is PollSession {
   return record(value) && typeof value.title === "string"
     && typeof value.showResults === "boolean" && Number.isInteger(value.revision)
     && Number.isInteger(value.configRevision)
-    && Array.isArray(value.undoQuestionIds) && value.undoQuestionIds.every((id) => typeof id === "string")
     && Array.isArray(value.questions) && value.questions.every((q: unknown) =>
       record(q) && typeof q.id === "string" && typeof q.prompt === "string"
-      && ["ready", "open", "closed"].includes(String(q.status))
       && Array.isArray(q.options) && q.options.length >= 2 && q.options.length <= 6
       && q.options.every((o: unknown) =>
         record(o) && typeof o.id === "string" && typeof o.label === "string"

@@ -1,5 +1,3 @@
-export type PollStatus = "ready" | "open" | "closed";
-
 export interface PollOption {
   id: string;
   label: string;
@@ -10,7 +8,6 @@ export interface PollQuestion {
   id: string;
   prompt: string;
   options: PollOption[];
-  status: PollStatus;
 }
 
 let counter = 0;
@@ -22,7 +19,6 @@ const VERDICTS = ["Busted", "Plausible", "Confirmed"];
 const q = (id: string, prompt: string, labels: string[] = VERDICTS): PollQuestion => ({
   id,
   prompt,
-  status: "ready",
   options: labels.map((label, i) => ({ id: `${id}-o${i}`, label, votes: 0 })),
 });
 

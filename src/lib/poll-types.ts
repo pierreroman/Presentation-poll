@@ -1,4 +1,4 @@
-import type { PollQuestion, PollStatus } from "../pages/poll-data";
+import type { PollQuestion } from "../pages/poll-data";
 
 export interface PollSession {
   title: string;
@@ -6,7 +6,6 @@ export interface PollSession {
   showResults: boolean;
   revision: number;
   configRevision: number;
-  undoQuestionIds: string[];
 }
 
 export interface ClientPrincipal {
@@ -17,7 +16,6 @@ export interface ClientPrincipal {
 }
 
 export type PresenterCommand =
-  | { type: "status"; questionId: string; status: PollStatus }
   | { type: "results"; showResults: boolean }
-  | { type: "undo" | "reset"; questionId: string }
+  | { type: "resetAll" }
   | { type: "edit"; title: string; questions: PollQuestion[]; configRevision: number };

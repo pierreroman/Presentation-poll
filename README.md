@@ -12,22 +12,24 @@ Preloaded with the six questions from the *Digital sovereignty* session. Edit th
 - **Reference-inspired design:** dark navy grid and neon accents, a responsive two-column
   statement-card landing page, and a light/dark theme switch. Background artwork is CSS,
   not a screenshot containing duplicated text.
-- **Vote view:** see every statement and add votes to the question opened in Presenter.
+- **Vote view:** attendees can answer any or all statements, in any order. There is no
+  open/closed voting state or presenter action required before answering.
   Each click adds one vote; this is not one-response-per-person voting.
 - **Presenter / Questions / Results:** only invited Microsoft accounts with the `presenter` role
   can access these views or their APIs. Attendees see voting only.
 - **One results page per question:** `/results-1` shows only question 1, `/results-2`
-  only question 2, and so on. Each page shows the statement, status, answer counts,
+  only question 2, and so on. Each page shows the statement, answer counts,
   percentages, and question total, with Previous/Next links. `/results` is an index
   linking to these individual pages. URLs follow the current question order; reordering
   questions changes which statement appears at each number. Invalid or removed question
   numbers show "Question not found", not another question's results.
   Pages refresh every three seconds and are read-only. Presenters see the actual
   counts here even when results are hidden from attendees.
-- **Run of show:** every question with its status (Not started / Voting open / Closed) and vote count.
+- **Run of show:** every question with its vote count.
 - **Present view:** big question, A/B/C answers with live bars, percentages and counts.
-- **Controls:** Open / Close voting (one question open at a time), Hide / Show results,
-  Undo last vote, Reset, Previous / Next.
+- **Controls:** Hide / Show results and Previous / Next. A presenter-only **Reset all
+  votes** button clears every question after confirmation; it cannot be undone.
+  Per-question Reset and Undo last vote are no longer available.
 - **Questions view:** add, edit, reorder, delete questions; 2–6 answers each and at most
   20 questions. Use **Save and present** to persist edits. Switching views without
   saving does not publish the draft. Concurrent edits by another presenter are rejected
@@ -35,12 +37,16 @@ Preloaded with the six questions from the *Digital sovereignty* session. Edit th
 
 Votes and presenter changes are persisted on the server and shared across devices.
 Browsers refresh state every three seconds. Hidden results are removed from public API
-responses, not just hidden in CSS. Undo and reset operate on shared votes.
+responses, not just hidden in CSS. Reset all votes updates the shared session
+atomically, preserving question text, answers, title, and results visibility.
+Voting remains available immediately after resetting.
+Existing stored sessions are upgraded on read without clearing their current votes;
+obsolete voting states and undo history are removed on the next successful write.
 
 > **Limitations:** anonymous voting does not enforce one vote per person or provide
 > bot/abuse protection. Each click adds a vote. This is a small-session demo, not an
-> election system. A session approaching the Table entity size limit fails explicitly;
-> reset old votes to free capacity. No email addresses or account IDs are stored with
+> election system. Only aggregate counts are stored, not a per-vote history.
+> Oversized question data fails explicitly. No email addresses or account IDs are stored with
 > attendee votes. Presenter role assignments live in Azure Static Web Apps, not in the browser.
 
 ## Run locally
@@ -159,7 +165,7 @@ To revoke access, remove the user's `presenter` role in Role management.
 `/presenter`, `/questions`, `/results`, `/results-*`, and `/api/presenter/*`. The API independently verifies the
 trusted Microsoft identity and `presenter` role for every private read and mutation.
 Unknown API routes are restricted by default, and public votes cannot alter questions,
-status, results visibility, or role assignments. GitHub sign-in is disabled.
+counts through a reset, results visibility, or role assignments. GitHub sign-in is disabled.
 
 Never host this API as a standalone, anonymously reachable Function App without adding
 independent token validation. The trusted `x-ms-client-principal` header is supplied

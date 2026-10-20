@@ -1,5 +1,5 @@
 import { TableClient, type TableEntityResult } from "@azure/data-tables";
-import { HttpError, initialPoll, type StoredPoll } from "./poll";
+import { HttpError, initialPoll, normalizePoll, type StoredPoll } from "./poll";
 
 interface PollEntity {
   chunkCount: number;
@@ -26,7 +26,7 @@ function hasStatus(error: unknown, status: number): boolean {
 export function encodePoll(poll: StoredPoll): PollEntity & typeof keys {
   const json = JSON.stringify(poll);
   if (json.length > 400_000) {
-    throw new HttpError(413, "This session has reached storage capacity. Reset votes or start a new session.");
+    throw new HttpError(413, "This session has reached storage capacity. Reduce the question data before saving.");
   }
   const chunks: string[] = [];
   for (let start = 0; start < json.length;) {
@@ -50,7 +50,7 @@ export function decodePoll(entity: PollEntity): StoredPoll {
     if (typeof entity[`data${i}`] !== "string") throw new Error("Stored session data is incomplete.");
     json += entity[`data${i}`];
   }
-  return JSON.parse(json) as StoredPoll;
+  return normalizePoll(JSON.parse(json) as StoredPoll);
 }
 
 export async function loadPoll(client = table()): Promise<TableEntityResult<PollEntity>> {

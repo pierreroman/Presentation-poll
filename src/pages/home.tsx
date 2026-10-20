@@ -6,12 +6,10 @@ import {
   ArrowUp,
   Eye,
   EyeOff,
-  Lock,
   Play,
   Plus,
   RotateCcw,
   Trash2,
-  Undo2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -20,46 +18,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { newId, type PollQuestion, type PollStatus } from "./poll-data";
+import { newId, type PollQuestion } from "./poll-data";
 import { usePollSession } from "@/lib/use-poll-session";
 import type { PollSession } from "@/lib/poll-types";
-
-const STATUS_TONE: Record<PollStatus, { label: string; dot: string; badge: string }> = {
-  ready: {
-    label: "Not started",
-    dot: "status-dot-ready",
-    badge: "status-badge",
-  },
-  open: {
-    label: "Voting open",
-    dot: "status-dot-open",
-    badge: "status-badge",
-  },
-  closed: {
-    label: "Closed",
-    dot: "status-dot-closed",
-    badge: "status-badge",
-  },
-};
 
 const LETTERS = "ABCDEF";
 const MAX_OPTIONS = 6;
 const MIN_OPTIONS = 2;
-
-function StatusBadge({ status }: { status: PollStatus }) {
-  const tone = STATUS_TONE[status];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-        tone.badge,
-      )}
-    >
-      <span className={cn("size-2 rounded-full forced-colors:bg-[CanvasText]", tone.dot)} aria-hidden="true" />
-      {tone.label}
-    </span>
-  );
-}
 
 const totalVotes = (q: PollQuestion) => q.options.reduce((s, o) => s + o.votes, 0);
 
@@ -133,24 +98,14 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
   const index = Math.max(0, questions.findIndex((q) => q.id === currentId));
   const current = questions[index];
 
-  const setStatus = (status: PollStatus) => {
-    if (!current) return;
-    void poll.command({ type: "status", questionId: current.id, status });
-  };
-
   const vote = (optionId: string, questionId = current?.id) => {
     if (questionId) void poll.vote(questionId, optionId);
   };
 
-  const undoVote = () => {
-    if (!current) return;
-    void poll.command({ type: "undo", questionId: current.id });
-  };
-
-  const resetVotes = async () => {
-    if (!current) return;
-    if (await poll.command({ type: "reset", questionId: current.id })) {
-      toast.success("Votes cleared for this question");
+  const resetAllVotes = async () => {
+    if (!window.confirm("Reset all votes for every question? This cannot be undone.")) return;
+    if (await poll.command({ type: "resetAll" })) {
+      toast.success("All votes cleared");
     }
   };
 
@@ -159,7 +114,6 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
     if (next) setCurrentId(next.id);
   };
 
-  const canUndo = current ? session.undoQuestionIds.includes(current.id) : false;
   const saveQuestions = async () => {
     if (await poll.command({
       type: "edit", title: draftTitle, questions: draftQuestions, configRevision: editRevision,
@@ -204,6 +158,9 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
             </Button>
           ))}
         </div>
+        <Button variant="outline" onClick={() => void resetAllVotes()} disabled={!session.questions.some((q) => totalVotes(q) > 0)}>
+          <RotateCcw aria-hidden="true" /> Reset all votes
+        </Button>
         <a className="text-xs underline" href="/.auth/logout?post_logout_redirect_uri=/">Sign out</a>
         </div> : principal ? (
           <div className="text-xs text-muted-foreground">
@@ -222,14 +179,14 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
               Choose Busted, Plausible or Confirmed for each statement.
             </p>
             <p className="overview-note">
-              Vote when the presenter opens a statement. Each click adds one shared vote.
+              Answer any or all statements, in any order. Each click adds one shared vote.
               Results reflect audience opinion, not a factual verdict. Updates refresh automatically.
             </p>
           </div>
           <div className="overview-progress-heading">
-            <span className="status-badge">
-              <span className={questions.some((q) => q.status === "open") ? "status-dot-open" : "status-dot-ready"} />
-              {questions.some((q) => q.status === "open") ? "Voting is open" : "Waiting for presenter"}
+            <span className="voting-note">
+              <span className="voting-dot" />
+              Answer any questions you choose
             </span>
             <span aria-live="polite">
               {showResults ? `${questions.filter((q) => totalVotes(q) > 0).length} of ${questions.length} with votes` : "Results hidden"}
@@ -248,12 +205,11 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
               <article key={q.id} className="question-card" aria-labelledby={`overview-${q.id}`}>
                 <div className="question-card-meta">
                   <span className="eyebrow">Statement {i + 1}</span>
-                  <StatusBadge status={q.status} />
                 </div>
                 <h2 id={`overview-${q.id}`}>{q.prompt}</h2>
                 <div className="question-card-options" style={{ gridTemplateColumns: `repeat(${Math.min(3, q.options.length)}, minmax(0, 1fr))` }}>
                   {q.options.map((o) => (
-                    <button key={o.id} type="button" disabled={q.status !== "open"}
+                    <button key={o.id} type="button"
                       onClick={() => vote(o.id, q.id)}
                       aria-label={`${q.prompt} ${o.label}. Add a vote.`}
                       className={cn("verdict-button", showResults && o.votes > 0 && "has-votes")}>
@@ -282,7 +238,6 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
                 <span className="text-sm font-medium text-foreground">
                   Question {index + 1} of {questions.length}
                 </span>
-                <StatusBadge status={current.status} />
               </div>
               <h1 id="current-question" className="mt-3 text-3xl font-semibold leading-tight tracking-tight">
                 {current.prompt}
@@ -291,24 +246,9 @@ function PollPage({ poll, session }: { poll: ReturnType<typeof usePollSession>; 
               <ResultsBoard question={current} showResults={showResults} onVote={(id) => vote(id)} />
 
               <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border pt-4">
-                {current.status === "open" ? (
-                  <Button onClick={() => setStatus("closed")}>
-                    <Lock aria-hidden="true" /> Close voting
-                  </Button>
-                ) : (
-                  <Button onClick={() => setStatus("open")}>
-                    <Play aria-hidden="true" /> {current.status === "closed" ? "Reopen voting" : "Open voting"}
-                  </Button>
-                )}
                 <Button variant="outline" aria-pressed={showResults} onClick={() => void poll.command({ type: "results", showResults: !showResults })}>
                   {showResults ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
                   {showResults ? "Hide results" : "Show results"}
-                </Button>
-                <Button variant="outline" onClick={undoVote} disabled={!canUndo}>
-                  <Undo2 aria-hidden="true" /> Undo last vote
-                </Button>
-                <Button variant="ghost" onClick={resetVotes} disabled={totalVotes(current) === 0 && current.status === "ready"}>
-                  <RotateCcw aria-hidden="true" /> Reset
                 </Button>
                 <div className="ml-auto flex gap-2">
                   <Button variant="outline" onClick={() => go(-1)} disabled={index === 0}>
@@ -359,7 +299,6 @@ function SessionResults({ questions, path }: { questions: PollQuestion[]; path: 
               <a href={`/results-${index + 1}`} className="block rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-ring">
                 <div className="flex items-center justify-between gap-3">
                   <span className="eyebrow">Question {index + 1}</span>
-                  <StatusBadge status={question.status} />
                 </div>
                 <p className="mt-3 font-semibold">{question.prompt}</p>
                 <span className="mt-2 inline-block text-sm text-primary">View results <span aria-hidden="true">&rarr;</span></span>
@@ -405,7 +344,6 @@ function SessionResults({ questions, path }: { questions: PollQuestion[]; path: 
             <article aria-labelledby="question-result-heading" className="rounded-2xl border border-border bg-card p-5 sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="eyebrow">Question {number}</span>
-                <StatusBadge status={question.status} />
               </div>
               <h2 id="question-result-heading" className="mt-3 text-xl font-semibold">{question.prompt}</h2>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -479,7 +417,6 @@ function RunOfShow({
                     {q.prompt}
                   </span>
                   <span className="mt-1 flex items-center gap-2">
-                    <StatusBadge status={q.status} />
                     <span className="text-xs text-foreground">
                       {total} {total === 1 ? "vote" : "votes"}
                     </span>
@@ -505,7 +442,6 @@ function ResultsBoard({
 }) {
   const total = totalVotes(question);
   const max = Math.max(0, ...question.options.map((o) => o.votes));
-  const open = question.status === "open";
   const summary = useMemo(() => {
     if (total === 0) return "No votes yet.";
     const leaders = question.options.filter((o) => o.votes === max);
@@ -529,12 +465,11 @@ function ResultsBoard({
             <li key={o.id}>
               <button
                 type="button"
-                disabled={!open}
                 onClick={() => onVote(o.id)}
-                aria-label={`${LETTERS[i]}: ${o.label}${showResults ? `, ${o.votes} votes, ${pct}%` : ""}${open ? ". Add a vote" : ""}`}
+                aria-label={`${LETTERS[i]}: ${o.label}${showResults ? `, ${o.votes} votes, ${pct}%` : ""}. Add a vote`}
                 className={cn(
                   "group relative flex min-h-16 w-full items-center gap-4 overflow-hidden rounded-lg border bg-background px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  open ? "cursor-pointer border-border hover:border-primary" : "cursor-default border-border",
+                  "cursor-pointer border-border hover:border-primary",
                   leading && "border-primary",
                 )}
               >
@@ -563,11 +498,9 @@ function ResultsBoard({
                     </span>
                   </span>
                 )}
-                {open && (
-                  <span className="relative hidden text-sm font-medium text-foreground group-hover:inline" aria-hidden="true">
-                    +1
-                  </span>
-                )}
+                <span className="relative hidden text-sm font-medium text-foreground group-hover:inline" aria-hidden="true">
+                  +1
+                </span>
               </button>
             </li>
           );
@@ -605,7 +538,6 @@ function QuestionEditor({
       {
         id,
         prompt: "",
-        status: "ready",
         options: [
           { id: newId("o"), label: "", votes: 0 },
           { id: newId("o"), label: "", votes: 0 },

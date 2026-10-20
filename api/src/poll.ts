@@ -9,7 +9,6 @@ export class HttpError extends Error {
 
 export interface StoredPoll {
   session: PollSession;
-  history: { questionId: string; optionId: string }[];
 }
 
 export function initialPoll(): StoredPoll {
@@ -20,9 +19,7 @@ export function initialPoll(): StoredPoll {
       showResults: true,
       revision: 0,
       configRevision: 0,
-      undoQuestionIds: [],
     },
-    history: [],
   };
 }
 
@@ -75,9 +72,21 @@ function questionById(poll: StoredPoll, id: unknown): PollQuestion {
   return question;
 }
 
+export function normalizePoll(poll: StoredPoll): StoredPoll {
+  const { title, showResults, revision, configRevision, questions } = poll.session;
+  // Preserve existing counts while dropping legacy voting states and undo history.
+  return {
+    session: {
+      title, showResults, revision, configRevision,
+      questions: questions.map(({ id, prompt, options }) => ({
+        id, prompt, options: options.map(({ id, label, votes }) => ({ id, label, votes })),
+      })),
+    },
+  };
+}
+
 export function publicSession(poll: StoredPoll, presenter = false): PollSession {
-  const session = structuredClone(poll.session);
-  session.undoQuestionIds = presenter ? [...new Set(poll.history.map((v) => v.questionId))] : [];
+  const session = normalizePoll(poll).session;
   if (!presenter && !session.showResults) {
     for (const q of session.questions) {
       for (const option of q.options) option.votes = 0;
@@ -89,11 +98,9 @@ export function publicSession(poll: StoredPoll, presenter = false): PollSession 
 export function addVote(poll: StoredPoll, body: unknown): void {
   if (!isRecord(body)) throw new HttpError(400, "A JSON vote is required.");
   const question = questionById(poll, body.questionId);
-  if (question.status !== "open") throw new HttpError(409, "Voting is not open for this question.");
   const option = question.options.find((o) => o.id === body.optionId);
   if (!option) throw new HttpError(400, "Answer option not found.");
   option.votes += 1;
-  poll.history.push({ questionId: question.id, optionId: option.id });
   poll.session.revision += 1;
 }
 
@@ -101,37 +108,14 @@ export function presenterCommand(poll: StoredPoll, body: unknown, principal: Cli
   requirePresenter(principal);
   if (!isRecord(body)) throw new HttpError(400, "A JSON command is required.");
   switch (body.type) {
-    case "status": {
-      if (body.status !== "ready" && body.status !== "open" && body.status !== "closed") {
-        throw new HttpError(400, "Invalid voting status.");
-      }
-      const question = questionById(poll, body.questionId);
-      if (body.status === "open") {
-        for (const q of poll.session.questions) {
-          if (q.status === "open") q.status = "closed";
-        }
-      }
-      question.status = body.status;
-      break;
-    }
     case "results":
       if (typeof body.showResults !== "boolean") throw new HttpError(400, "Invalid results visibility.");
       poll.session.showResults = body.showResults;
       break;
-    case "undo": {
-      const question = questionById(poll, body.questionId);
-      const index = poll.history.findLastIndex((vote) => vote.questionId === question.id);
-      if (index < 0) throw new HttpError(409, "There is no vote to undo.");
-      const [last] = poll.history.splice(index, 1);
-      const option = question.options.find((o) => o.id === last.optionId);
-      if (option) option.votes = Math.max(0, option.votes - 1);
-      break;
-    }
-    case "reset": {
-      const question = questionById(poll, body.questionId);
-      question.status = "ready";
-      for (const option of question.options) option.votes = 0;
-      poll.history = poll.history.filter((vote) => vote.questionId !== question.id);
+    case "resetAll": {
+      for (const question of poll.session.questions) {
+        for (const option of question.options) option.votes = 0;
+      }
       break;
     }
     case "edit": {
@@ -165,13 +149,11 @@ export function presenterCommand(poll: StoredPoll, body: unknown, principal: Cli
             votes: old?.options.find((o) => o.id === optionId)?.votes ?? 0,
           };
         });
-        return { id, prompt, options, status: old?.status ?? "ready" };
+        return { id, prompt, options };
       });
       poll.session.title = title;
       poll.session.questions = questions;
       poll.session.configRevision += 1;
-      poll.history = poll.history.filter((vote) =>
-        questions.some((q) => q.id === vote.questionId && q.options.some((o) => o.id === vote.optionId)));
       break;
     }
     default:

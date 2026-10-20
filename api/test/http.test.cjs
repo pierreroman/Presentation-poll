@@ -50,30 +50,30 @@ test("direct private GET and POST requests reject anonymous callers before acces
 test("authenticated attendees cannot access private endpoints even with forged body roles", async () => {
   const response = await handle(request({
     principal: { ...presenter, userRoles: ["anonymous", "authenticated"] },
-    input: { type: "status", questionId: "q1", status: "open", userRoles: ["presenter"] },
+    input: { type: "resetAll", userRoles: ["presenter"] },
   }), context, true, memoryStore());
   assert.equal(response.status, 403);
 });
 
-test("invited presenters can open voting, attendees can vote, and state is shared", async () => {
+test("attendees can vote on multiple questions without presenter action and state is shared", async () => {
   const store = memoryStore();
-  const opened = await handle(request({
-    principal: presenter, input: { type: "status", questionId: "q1", status: "open" },
-  }), context, true, store);
-  assert.equal(opened.status ?? 200, 200);
   const voted = await handle(request({
     input: { questionId: "q1", optionId: "q1-o0" },
   }), context, false, store);
   assert.equal(voted.jsonBody.questions[0].options[0].votes, 1);
+  const otherVote = await handle(request({
+    input: { questionId: "q6", optionId: "q6-o2" },
+  }), context, false, store);
+  assert.equal(otherVote.jsonBody.questions[5].options[2].votes, 1);
   const read = await handle(request({ method: "GET" }), context, false, store);
   assert.equal(read.jsonBody.questions[0].options[0].votes, 1);
+  assert.equal(read.jsonBody.questions[5].options[2].votes, 1);
   assert.equal(read.headers["Cache-Control"], "no-store");
 });
 
 test("hidden results are redacted on both public GET and vote responses", async () => {
   const store = memoryStore();
   await store.change((poll) => {
-    presenterCommand(poll, { type: "status", questionId: "q1", status: "open" }, presenter);
     presenterCommand(poll, { type: "results", showResults: false }, presenter);
   });
   const voted = await handle(request({ input: { questionId: "q1", optionId: "q1-o0" } }), context, false, store);
@@ -82,6 +82,21 @@ test("hidden results are redacted on both public GET and vote responses", async 
   assert.equal(read.jsonBody.questions[0].options[0].votes, 0);
   const admin = await handle(request({ method: "GET", principal: presenter }), context, true, store);
   assert.equal(admin.jsonBody.questions[0].options[0].votes, 1);
+});
+
+test("only an invited presenter can reset all shared votes through the private API", async () => {
+  const store = memoryStore();
+  for (const [questionId, optionId] of [["q1", "q1-o0"], ["q6", "q6-o2"]]) {
+    await handle(request({ input: { questionId, optionId } }), context, false, store);
+  }
+  const denied = await handle(request({ input: { type: "resetAll" } }), context, true, store);
+  assert.equal(denied.status, 401);
+  assert.equal((await store.read()).session.questions[0].options[0].votes, 1);
+  const reset = await handle(request({ principal: presenter, input: { type: "resetAll" } }), context, true, store);
+  assert.equal(reset.status ?? 200, 200);
+  assert.ok(reset.jsonBody.questions.every((q) => q.options.every((o) => o.votes === 0)));
+  const next = await handle(request({ input: { questionId: "q6", optionId: "q6-o2" } }), context, false, store);
+  assert.equal(next.jsonBody.questions[5].options[2].votes, 1);
 });
 
 test("cross-site writes, malformed JSON and oversized payloads are rejected", async () => {
