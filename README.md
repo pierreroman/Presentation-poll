@@ -22,7 +22,7 @@ Preloaded with the six questions from the *Digital sovereignty* session. Edit th
 ## Run locally
 
 ```bash
-npm install
+npm ci
 npm run dev        # http://localhost:5173
 npm run build      # type-check + production build into dist/
 npm run preview    # serve dist/
@@ -35,15 +35,23 @@ Requires Node.js 20.19+ or 22.12+ (Vite 7).
 One-time setup (Azure CLI + GitHub CLI signed in):
 
 ```powershell
-./infra/deploy.ps1 -ResourceGroup rg-presentation-poll
+.\infra\deploy.ps1
 ```
 
 The script:
 
-1. Creates the resource group.
+1. Verifies tenant `26f29274-e3a0-4e49-bc81-5fde2f2996b2` and subscription
+   `dfcf7181-677b-4513-932b-75a4642ab752`, then reuses `RG-Presentation-Poll`
+   (or creates it if missing). Parameters can override these defaults.
 2. Deploys [`infra/main.bicep`](infra/main.bicep) (Static Web App, Free tier).
 3. Reads the SWA deployment token and stores it as the `AZURE_STATIC_WEB_APPS_API_TOKEN`
-   Actions secret on this repo.
+   Actions secret on this repo. Deployment tokens identify the target app, so the
+   workflow does not need an Azure client secret or subscription login.
+
+The Static Web App defaults to `eastus2`; its location can differ from the resource
+group's location. Dependencies are installed with `npm ci` from `package-lock.json`
+so Linux runners do not reuse Windows binaries committed in `node_modules`.
+Do not commit generated `node_modules/` or `dist/` directories.
 
 After that, every push to `main` runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml):
 install → type-check → build → upload `dist/` to the Static Web App. Same-repository pull
@@ -63,9 +71,9 @@ missing. Never commit or paste the token into the workflow.
 Manual alternative without the script:
 
 ```bash
-az group create -n rg-presentation-poll -l eastus2
-az deployment group create -g rg-presentation-poll -f infra/main.bicep
-az staticwebapp secrets list -n presentation-poll -g rg-presentation-poll --query properties.apiKey -o tsv
+az account set --subscription dfcf7181-677b-4513-932b-75a4642ab752
+az deployment group create -g RG-Presentation-Poll -f infra/main.bicep
+az staticwebapp secrets list -n presentation-poll -g RG-Presentation-Poll --query properties.apiKey -o tsv
 # paste the token into GitHub → Settings → Secrets and variables → Actions
 ```
 
