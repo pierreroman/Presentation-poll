@@ -8,6 +8,12 @@ Preloaded with the six questions from the *Digital sovereignty* session. Edit th
 
 ## What it does
 
+- **Reference-inspired design:** dark navy grid and neon accents, a responsive two-column
+  statement-card landing page, and a light/dark theme switch. Background artwork is CSS,
+  not a screenshot containing duplicated text.
+- **Vote view:** see every statement and add votes to the question opened in Presenter.
+  Each click adds one vote; this is not one-response-per-person voting.
+- **Presenter / Questions:** separate views preserve the controls and question editor.
 - **Run of show:** every question with its status (Not started / Voting open / Closed) and vote count.
 - **Present view:** big question, A/B/C answers with live bars, percentages and counts.
 - **Controls:** Open / Close voting (one question open at a time), Hide / Show results,

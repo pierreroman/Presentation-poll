@@ -1,26 +1,43 @@
-import { BarChart3 } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { HomePage } from "@/pages/home";
 
 export function App() {
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    document.documentElement.classList.toggle("dark", next === "dark");
+    document.documentElement.classList.toggle("light", next === "light");
+    setTheme(next);
+  };
+
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="site-shell flex min-h-screen flex-col">
       <a
         href="#poll-work"
         className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:ring-2 focus:ring-ring"
       >
         Skip to poll
       </a>
-      <header className="border-b border-border bg-primary text-primary-foreground">
-        <div className="mx-auto flex h-12 w-full max-w-[1400px] items-center gap-2 px-4">
-          <BarChart3 className="size-5" aria-hidden="true" />
-          <span className="text-sm font-semibold tracking-tight">Debunkers</span>
-          <span className="text-xs text-primary-foreground/80">Live audience polling</span>
+      <header className="site-header">
+        <div className="site-header-inner">
+          <a href="#" className="brand" aria-label="Sovereign cloud Debunkers home">
+            <strong>Sovereign cloud</strong> <span>Debunkers</span>
+          </a>
+          <Button variant="outline" size="sm" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
+            Switch theme
+          </Button>
         </div>
       </header>
       <main className="flex flex-1 flex-col">
         <HomePage />
       </main>
+      <footer className="site-footer">
+        <p>Six statements. Three possibilities. Your perspective.</p>
+        <p>Votes stay on this device for this session. Reloading clears all votes.</p>
+      </footer>
       <Toaster />
     </div>
   );

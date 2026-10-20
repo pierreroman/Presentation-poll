@@ -31,18 +31,18 @@ import {
 const STATUS_TONE: Record<PollStatus, { label: string; dot: string; badge: string }> = {
   ready: {
     label: "Not started",
-    dot: "bg-gray-500",
-    badge: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100",
+    dot: "status-dot-ready",
+    badge: "status-badge",
   },
   open: {
     label: "Voting open",
-    dot: "bg-green-600",
-    badge: "bg-green-100 text-green-900 dark:bg-green-900 dark:text-green-50",
+    dot: "status-dot-open",
+    badge: "status-badge",
   },
   closed: {
     label: "Closed",
-    dot: "bg-blue-600",
-    badge: "bg-blue-100 text-blue-900 dark:bg-blue-900 dark:text-blue-50",
+    dot: "status-dot-closed",
+    badge: "status-badge",
   },
 };
 
@@ -67,13 +67,13 @@ function StatusBadge({ status }: { status: PollStatus }) {
 
 const totalVotes = (q: PollQuestion) => q.options.reduce((s, o) => s + o.votes, 0);
 
-type Mode = "present" | "edit";
+type Mode = "vote" | "present" | "edit";
 
 export function HomePage() {
   const [title, setTitle] = useState(SESSION_TITLE);
   const [questions, setQuestions] = useState<PollQuestion[]>(SAMPLE_QUESTIONS);
   const [currentId, setCurrentId] = useState<string>(SAMPLE_QUESTIONS[0].id);
-  const [mode, setMode] = useState<Mode>("present");
+  const [mode, setMode] = useState<Mode>("vote");
   const [showResults, setShowResults] = useState(true);
   const [voteLog, setVoteLog] = useState<{ q: string; o: string }[]>([]);
 
@@ -95,13 +95,14 @@ export function HomePage() {
     );
   };
 
-  const vote = (optionId: string) => {
-    if (!current || current.status !== "open") return;
-    update(current.id, (q) => ({
+  const vote = (optionId: string, questionId = current?.id) => {
+    const question = questions.find((q) => q.id === questionId);
+    if (!question || question.status !== "open") return;
+    update(question.id, (q) => ({
       ...q,
       options: q.options.map((o) => (o.id === optionId ? { ...o, votes: o.votes + 1 } : o)),
     }));
-    setVoteLog((l) => [...l, { q: current.id, o: optionId }]);
+    setVoteLog((l) => [...l, { q: question.id, o: optionId }]);
   };
 
   const undoVote = () => {
@@ -135,8 +136,9 @@ export function HomePage() {
   const canUndo = current ? voteLog.some((v) => v.q === current.id) : false;
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[1400px] flex-col gap-4 px-4 py-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="poll-container">
+      <div className="view-toolbar flex flex-wrap items-end justify-between gap-3">
+        {mode !== "vote" && (
         <div className="min-w-0 flex-1">
           <Label htmlFor="session-title" className="text-xs font-medium text-foreground">
             Session
@@ -148,8 +150,9 @@ export function HomePage() {
             className="mt-1 h-10 max-w-xl border-transparent px-0 text-xl font-semibold shadow-none hover:border-border focus-visible:px-2"
           />
         </div>
+        )}
         <div role="group" aria-label="View" className="inline-flex rounded-md border border-border p-0.5">
-          {(["present", "edit"] as Mode[]).map((m) => (
+          {(["vote", "present", "edit"] as Mode[]).map((m) => (
             <Button
               key={m}
               size="sm"
@@ -157,13 +160,69 @@ export function HomePage() {
               aria-pressed={mode === m}
               onClick={() => setMode(m)}
             >
-              {m === "present" ? "Present" : "Questions"}
+              {m === "vote" ? "Vote" : m === "present" ? "Presenter" : "Questions"}
             </Button>
           ))}
         </div>
       </div>
 
-      {mode === "present" ? (
+      {mode === "vote" ? (
+        <section id="poll-work" tabIndex={-1} aria-labelledby="overview-heading" className="overview outline-none">
+          <div className="overview-intro">
+            <p className="eyebrow">Separating fact from fiction</p>
+            <h1 id="overview-heading">Sovereign cloud<br /><span>Debunkers</span></h1>
+            <p className="overview-description">
+              Put {questions.length === 6 ? "six" : questions.length} common assumptions to the test.
+              Choose Busted, Plausible or Confirmed for each statement.
+            </p>
+            <p className="overview-note">
+              Open a question in Presenter to collect votes. Each click adds one vote on this device.
+              Results reflect audience opinion, not a factual verdict.
+            </p>
+          </div>
+          <div className="overview-progress-heading">
+            <span className="status-badge">
+              <span className={questions.some((q) => q.status === "open") ? "status-dot-open" : "status-dot-ready"} />
+              {questions.some((q) => q.status === "open") ? "Voting is open" : "Waiting for presenter"}
+            </span>
+            <span aria-live="polite">
+              {questions.filter((q) => totalVotes(q) > 0).length} of {questions.length} with votes
+            </span>
+          </div>
+          <progress className="overview-progress" aria-label="Questions with votes"
+            value={questions.filter((q) => totalVotes(q) > 0).length} max={Math.max(1, questions.length)} />
+          {questions.length === 0 && (
+            <div className="question-card">
+              <p>No questions yet.</p>
+              <Button onClick={() => setMode("edit")}>Add questions</Button>
+            </div>
+          )}
+          <div className="question-grid">
+            {questions.map((q, i) => (
+              <article key={q.id} className="question-card" aria-labelledby={`overview-${q.id}`}>
+                <div className="question-card-meta">
+                  <span className="eyebrow">Statement {i + 1}</span>
+                  <StatusBadge status={q.status} />
+                </div>
+                <h2 id={`overview-${q.id}`}>{q.prompt}</h2>
+                <div className="question-card-options" style={{ gridTemplateColumns: `repeat(${Math.min(3, q.options.length)}, minmax(0, 1fr))` }}>
+                  {q.options.map((o) => (
+                    <button key={o.id} type="button" disabled={q.status !== "open"}
+                      onClick={() => vote(o.id, q.id)}
+                      aria-label={`${q.prompt} ${o.label}. Add a vote.`}
+                      className={cn("verdict-button", showResults && o.votes > 0 && "has-votes")}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="present-question" onClick={() => { setCurrentId(q.id); setMode("present"); }}>
+                  Present statement {i + 1} <ArrowRight className="size-3" aria-hidden="true" />
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : mode === "present" ? (
         <div className="grid flex-1 gap-4 lg:grid-cols-[300px_1fr]">
           <RunOfShow questions={questions} currentId={current?.id} onSelect={setCurrentId} />
           {current ? (
@@ -183,7 +242,7 @@ export function HomePage() {
                 {current.prompt}
               </h1>
 
-              <ResultsBoard question={current} showResults={showResults} onVote={vote} />
+              <ResultsBoard question={current} showResults={showResults} onVote={(id) => vote(id)} />
 
               <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border pt-4">
                 {current.status === "open" ? (
